@@ -1,3 +1,4 @@
 rag_env/
 model/
 .gitignore
+chroma_db/

@@ -19,7 +19,7 @@ max_token_count = 300 # hard-coded token count
 
 
 # initialize clients and storage directory
-os.makedirs(dbPath, exsist_ok= True)
+os.makedirs(dbPath, exist_ok= True)
 
 # db
 chrom_client = chromadb.PersistentClient(path=dbPath)
@@ -31,7 +31,12 @@ collection = chrom_client.get_or_create_collection(
 # LLM
 agent = Llama(model_path=mdlPath)
 
+# tokenize embedder
+sentenceModel = SentenceTransformer("all-MiniLM-L6-v2")
 
+
+
+# === storing and stuff ===
 # processes file
 def import_and_parse(filePath):
     elements = partition(filePath)
@@ -61,11 +66,20 @@ def chunking(pages):
     return chunks
 
 
+# helper func to make sure embeddings have the right value
+def normalize_embedding(embedding):
+    arr = np.array(embedding, dtype=np.float32)
+    norm = np.linalg.norm(arr)
+    if norm == 0:
+        return arr
+    return (arr / norm).tolist()
+
+
 # embeds
 def embedding(chunks):
-    model = SentenceTransformer("all-MiniLM-L6-v2")  #can change this, current one is small & CPU-friendly but less efficient
+    #model = SentenceTransformer("all-MiniLM-L6-v2")  #can change this, current one is small & CPU-friendly but less efficient
     texts = [c["chunk_text"] for c in chunks]
-    embeddings = model.encode(texts, normalize_embeddings=True)
+    embeddings = sentenceModel.encode(texts, normalize_embeddings=True)
     embedded_chunks = []
     for c, emb in zip(chunks, embeddings):
         embedded_chunks.append({
@@ -78,7 +92,8 @@ def embedding(chunks):
 
 # stores the embedded chunks
 def store_into_db(embeddedChunks):
-    existing_ids = set(collection.get()["ids"] or [])
+    existing_ids = set(collection.get()["ids"] or []) if collection.get() else set()
+
     new_count = 0
     for i, chunk in enumerate(embeddedChunks):
         uid = f"page{chunk['page_number']}_chunk{i}"
@@ -95,6 +110,55 @@ def store_into_db(embeddedChunks):
     
     return collection
 
+
+
+# === retrevial part ===
+
+# getting top k result from queue
+def get_top_k(collection, query_embedding, k=10):
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=k,
+        include=["documents", "distances", "metadatas"]
+    )
+    if not results["documents"] or not results["documents"][0]:
+        print("DEBUG: No candidate chunks retrieved.")
+        return []
+
+    top_paragraphs = []
+    for doc, dist, meta in zip(results["documents"][0], results["distances"][0], results["metadatas"][0]):
+        similarity = 1 - dist
+        top_paragraphs.append({"text": doc, "similarity": similarity, "metadata": meta})
+    return top_paragraphs
+
+
+# custom filter for cos similarity
+def filter_threshold(paragraphs):
+    if not paragraphs:
+        return []
+    filtered = [p for p in paragraphs if p["similarity"] >= threshold]
+    return filtered
+
+
+# generate ans with query res
+def LLM_with_res(question, paragraphs):
+    if not paragraphs:
+        return "I couldn't find relevant information in the document to answer that."
+
+    context_text = "\n\n".join([p["text"] for p in paragraphs])
+    if len(context_text) > 1200:  # limit for our smaller model (adjust if diff model)
+        context_text = context_text[:1200]
+
+    prompt = f"Answer the following question using ONLY the provided context.\n\nContext:\n{context_text}\n\nQuestion: {question}\nAnswer:"
+
+    response = agent(
+        prompt,
+        max_tokens=500,
+        temperature=0.2,
+        stop=["Question:"]
+    )
+
+    return response["choices"][0]["text"].strip() if "choices" in response else response["text"].strip()
 
 
 def main():
@@ -117,3 +181,20 @@ def main():
     # embed user question
 
     # loop interaction
+    while True:
+        question = input("\nEnter your question (or type 'exit' to quit): ")
+        if question.lower() in ["exit", "quit"]:
+            break
+
+        query_embedding = sentenceModel.encode([question], normalize_embeddings=True)[0]
+
+        top_k = get_top_k(collection, query_embedding, k=10)
+        filtered = filter_threshold(top_k)
+
+        answer = LLM_with_res(question, filtered)
+        print("\nAnswer:\n", answer)
+
+
+
+if __name__ == "__main__":
+    main()
