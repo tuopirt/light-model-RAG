@@ -1,4 +1,0 @@
-once downloaded desired LLM model from:
-https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF
-
-put it in this folder
