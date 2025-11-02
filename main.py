@@ -14,7 +14,7 @@ import tiktoken
 pdfPath = "./files/nvidia_quarter_report.pdf" # example file used as grounding
 dbPath = os.path.abspath("./chroma_db") # using chroma db as our database
 mdlPath = "model/mistral-7b-instruct-v0.2.Q3_K_M.gguf" # LLM used
-threshold = 0.3# hard-coded value change as needed
+threshold = 0.1# hard-coded value change as needed
 MAX_CHUNK_TOKEN = 300 # hard-coded token count
 MAX_INPUT_TOKENS = 1500
 MAX_OUTPUT_TOKENS = 500
