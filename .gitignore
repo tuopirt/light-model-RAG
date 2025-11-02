@@ -1,1 +1,3 @@
 rag_env/
+model/
+.gitignore
