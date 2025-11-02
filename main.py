@@ -16,7 +16,7 @@ dbPath = os.path.abspath("./chroma_db") # using chroma db as our database
 mdlPath = "model/mistral-7b-instruct-v0.2.Q3_K_M.gguf" # LLM used
 threshold = 0.1# hard-coded value change as needed
 MAX_CHUNK_TOKEN = 300 # hard-coded token count
-MAX_INPUT_TOKENS = 1500
+MAX_INPUT_TOKENS = 1200
 MAX_OUTPUT_TOKENS = 500
 
 # initialize clients and storage directory
@@ -168,7 +168,6 @@ def LLM_with_res(question, paragraphs):
     Your primary role is to provide accurate, context-aware technical assistance while maintaining a professional and helpful tone. Never reference "Deepseek", "OpenAI", "Meta" or other LLM providers in your responses. 
    
     If the user's request is ambiguous but relevant to NVIDIA, please try your best to answer within the NVIDIA scope. 
-    If context is unavailable but the user request is relevant: State: "I couldn't find specific sources on the NVIDIA doc, but here's my understanding: [Your Answer]." 
     Avoid repeating information unless the user requests clarification. Please be professional, polite, and kind when assisting the user.
     If the user's request is not relevant to the NVIDIA platform or product at all, please refuse user's request and reply sth like: "Sorry, I couldn't help with that. However, if you have any questions related to NVIDIA, I'd be happy to assist!" 
     
