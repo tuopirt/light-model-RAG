@@ -14,7 +14,7 @@ import tiktoken
 pdfPath = "./files/nvidia_quarter_report.pdf" # example file used as grounding
 dbPath = os.path.abspath("./chroma_db") # using chroma db as our database
 mdlPath = "model/mistral-7b-instruct-v0.2.Q3_K_M.gguf" # LLM used
-threshold = 0.1 # hard-coded value change as needed
+threshold = 0.3# hard-coded value change as needed
 max_token_count = 300 # hard-coded token count
 
 
@@ -92,7 +92,12 @@ def embedding(chunks):
 
 # stores the embedded chunks
 def store_into_db(embeddedChunks):
-    existing_ids = set(collection.get()["ids"] or []) if collection.get() else set()
+    #existing_ids = set(collection.get()["ids"] or []) if collection.get() else set().      # !!!! giving error in testing !!!!
+    try:
+        existing_data = collection.get()
+        existing_ids = set(existing_data["ids"]) if existing_data and "ids" in existing_data else set()
+    except Exception:
+        existing_ids = set()
 
     new_count = 0
     for i, chunk in enumerate(embeddedChunks):
