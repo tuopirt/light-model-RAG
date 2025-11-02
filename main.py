@@ -14,9 +14,10 @@ import tiktoken
 pdfPath = "./files/nvidia_quarter_report.pdf" # example file used as grounding
 dbPath = os.path.abspath("./chroma_db") # using chroma db as our database
 mdlPath = "model/mistral-7b-instruct-v0.2.Q3_K_M.gguf" # LLM used
-threshold = 0.1 # hard-coded value change as needed
-max_token_count = 300 # hard-coded token count
-
+threshold = 0.3# hard-coded value change as needed
+MAX_CHUNK_TOKEN = 300 # hard-coded token count
+MAX_INPUT_TOKENS = 1500
+MAX_OUTPUT_TOKENS = 500
 
 # initialize clients and storage directory
 os.makedirs(dbPath, exist_ok= True)
@@ -29,7 +30,7 @@ collection = chrom_client.get_or_create_collection(
 )
 
 # LLM
-agent = Llama(model_path=mdlPath)
+agent = Llama(model_path=mdlPath, n_ctx=2048)
 
 # tokenize embedder
 sentenceModel = SentenceTransformer("all-MiniLM-L6-v2")
@@ -59,8 +60,8 @@ def chunking(pages):
     for page in pages:
         text = page["text"]
         tokens = enc.encode(text)
-        for i in range(0, len(tokens), max_token_count):
-            token_chunk = tokens[i:i + max_token_count]
+        for i in range(0, len(tokens), MAX_CHUNK_TOKEN):
+            token_chunk = tokens[i:i + MAX_CHUNK_TOKEN]
             chunk_text = enc.decode(token_chunk)
             chunks.append({"chunk_text": chunk_text, "page_number": page["page_number"]})
     return chunks
@@ -92,7 +93,12 @@ def embedding(chunks):
 
 # stores the embedded chunks
 def store_into_db(embeddedChunks):
-    existing_ids = set(collection.get()["ids"] or []) if collection.get() else set()
+    #existing_ids = set(collection.get()["ids"] or []) if collection.get() else set().      # !!!! giving error in testing !!!!
+    try:
+        existing_data = collection.get()
+        existing_ids = set(existing_data["ids"]) if existing_data and "ids" in existing_data else set()
+    except Exception:
+        existing_ids = set()
 
     new_count = 0
     for i, chunk in enumerate(embeddedChunks):
@@ -146,8 +152,13 @@ def LLM_with_res(question, paragraphs):
         return "I couldn't find relevant information in the document to answer that."
 
     context_text = "\n\n".join([p["text"] for p in paragraphs])
-    if len(context_text) > 1200:  # limit for our smaller model (adjust if diff model)
-        context_text = context_text[:1200]
+    #if len(context_text) > 1200:  # limit for our smaller model (adjust if diff model) !!hard codeed!!
+        #context_text = context_text[:1200]
+    enc = tiktoken.get_encoding("cl100k_base")
+    tokens = enc.encode(context_text)
+    if len(tokens) > MAX_INPUT_TOKENS:
+        tokens = tokens[:MAX_INPUT_TOKENS]
+    context_text = enc.decode(tokens)
 
     #prompt = f"Answer the following question using ONLY the provided context.\n\nContext:\n{context_text}\n\nQuestion: {question}\nAnswer:"
 
@@ -175,12 +186,18 @@ def LLM_with_res(question, paragraphs):
 
     response = agent(
         prompt,
-        max_tokens=500,
+        max_tokens=MAX_OUTPUT_TOKENS,
         temperature=0.2,
         stop=["Question:"]
     )
 
-    return response["choices"][0]["text"].strip() if "choices" in response else response["text"].strip()
+    #return response["choices"][0]["text"].strip() if "choices" in response else response["text"].strip()
+    if isinstance(response, dict) and "choices" in response and len(response["choices"]) > 0:
+        return response["choices"][0].get("text", "").strip()
+    elif isinstance(response, dict) and "text" in response:
+        return response["text"].strip()
+    else:
+        return str(response)
 
 
 def main():
@@ -213,6 +230,7 @@ def main():
         top_k = get_top_k(collection, query_embedding, k=10)
         filtered = filter_threshold(top_k)
 
+        print("thinking...")
         answer = LLM_with_res(question, filtered)
         print("\nAnswer:\n", answer)
 
