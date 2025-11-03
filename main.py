@@ -179,6 +179,8 @@ def LLM_with_res(question, paragraphs):
     ## User Request ##
     {question}
     
+    ## Context ##
+    {context_text}
     
     ## Your response ##
     """
